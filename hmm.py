@@ -3,6 +3,14 @@ import random
 import re
 import sys
 
+
+'''
+This class implements the Viterbi algorithm for finding the best state path of a 
+Hidden Markov Model. find_prob recursively computes the probability that 
+the sequence up to the given index ended in a given state. This updates the 
+table state_probs storing these results, which find_best_path can use to 
+reconstruct the best path to the end of the sequence.
+'''
 class HMM:
 
     def __init__(self, sequence, states, state_matrix, output_matrix, begin_matrix):
@@ -18,12 +26,13 @@ class HMM:
         #contains probabilities that each output will result from each state
         self.output_matrix = output_matrix
 
-        #contains the probability of the optimal state-path ending at each state
-        #and each index, as well as backpointers
+        #Dynamic programming table which, for each state, stores
+        #the probability of the optimal state-path ending at that state
+        #and each index, as well as the preceding state
+        #Each entry in the dictionary is a list of pairs [probability, last state]
         self.state_probs = {}
 
-        #this initialization is fairly meaningless, I think. It makes it so 
-        #the indices start at 1
+        #this initialization makes it so the indices start at 1
         for state in self.states:
             self.state_probs[state] = [[0, "begin"]]
 
@@ -59,7 +68,6 @@ class HMM:
     #returns probability of the best path ending at that index
     def find_best_prob(self, index):
         if index > len(self.sequence):
-            print "oops"
             return None
 
         if index == 0:
@@ -72,20 +80,21 @@ class HMM:
             if state_prob > best_prob:
                 best_prob = state_prob
 
-        #print self.state_probs
         return best_prob
-        #return self.state_path
 
-    #returns probability of best path ending in given state and index
-    #indices start at 1, so index = 1 means looking at the first character
-    #in the sequence
+    #Recursively computes and returns probability of best path ending in given
+    #state and index. Indices start at 1, so index = 1 means looking at the first 
+    #character in the sequence
     def find_prob(self, state, index):
+        #if the probability of a given state and index have already been
+        #computed, return the stored value
         if len(self.state_probs[state]) > index:
             return self.state_probs[state][index][0]
 
         best_prob = -float("inf")
         out = self.prob_output(self.sequence[index-1], state)
         best_k = state
+        #loop through states and find the most likely preceding state
         for k in self.states:
             #change_prob is probability k will transition to state
             #for first index, look at begin_matrix since it is transitioning from 
@@ -95,25 +104,29 @@ class HMM:
             else:
                 change_prob = self.prob_state_change(k, state)
 
-            #state_prob indicates probability of best path for given state
+            #state_prob is probability of best path ending in k and index - 1
             if index < 2:
                 state_prob = 0
             else:
                 state_prob = self.find_prob(k, index - 1)
 
+            #state_prob * change_prob is probability the HMM followed the most likely path
+            #ending at state k at index - 1 and then transitioned to state
+            #probabilities are logarithms so they are added instead of multiplied
             if change_prob + state_prob > best_prob:
                 best_prob = change_prob + state_prob
                 best_k = k
 
         best_prob += self.prob_output(self.sequence[index-1], state)
+        #update dictionary
         self.state_probs[state].append([best_prob, best_k])
         return best_prob
             
-
+    #probability that state 1 transitions to state 2
     def prob_state_change(self, state1, state2):
         return self.state_matrix[state1][state2]
 
-    #assumes a 0th order HMM
+    #probability that a state produces a given output
     def prob_output(self, output, state):
         return self.output_matrix[state][output]
 
@@ -157,6 +170,7 @@ def find_CGI(sequence):
     path = CPG_hmm.find_best_path()
     
     #once the path is found, the start and endpoints of CG islands are located
+    #'+' states are in CGI islands, so search for sequences of + states
     index = 0
     islands = []
     
